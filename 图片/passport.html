@@ -1,0 +1,227 @@
+var MSG_ERROR_DEFAULT = MSG_ERROR_DEFAULT || '当前网络繁忙，请重新尝试';
+var eellySSOController = eellySSOController || {};
+
+/**
+ * 生成随机数
+ * 
+ * @param int length
+ * @returns string     
+ */
+eellySSOController.randomString = function(length) {
+    var chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz'.split('');
+
+    if (!length) {
+        length = Math.floor(Math.random() * chars.length);
+    }
+
+    var str = '';
+    for (var i = 0; i < length; i++) {
+        str += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return str;
+}
+
+/**
+ * 先获取公钥
+ * 
+ * @param {type} obj 异步返回的数据
+ * @param {type} formObj 需要处理的表单
+ */
+eellySSOController.preloginCallBack = function(obj, formObj) {
+    try {
+        if (obj.code == 0) {
+            if (formObj.find('input[name=servertime]').length > 0) {
+                formObj.find('input[name=servertime]').val(obj.retval.servertime);
+            } else {
+                formObj.append('<input type="hidden" name="servertime" value="'+obj.retval.servertime+'" />');
+            }
+
+            if (formObj.find('input[name=nonce]').length > 0) {
+                formObj.find('input[name=nonce]').val(obj.retval.nonce);
+            } else {
+                formObj.append('<input type="hidden" name="nonce" value="'+obj.retval.nonce+'" />');
+            }
+
+            if (formObj.find('input[name=appKey]').length > 0) {
+                formObj.find('input[name=appKey]').val(obj.retval.appKey);
+            } else {
+                formObj.append('<input type="hidden" name="appKey" value="'+obj.retval.appKey+'" />');
+            }
+        } else {
+            alertDialog(obj.msg);
+        }
+    } catch (e) {
+        alertDialog(MSG_ERROR_DEFAULT);
+    }
+}
+
+/**
+ * 提交登录表单，可根据实际场景另写一个方法
+ */
+eellySSOController.submitLoginForm = function(_formObj) {
+    /*创建iframe*/
+    if ($('iframe[name=ssoLoginFrame]').length <= 0) {
+        $('body').append('<iframe id="ssoLoginFrame" name="ssoLoginFrame" width="0" height="0" \n\
+                            style="display:none;" src="javascript:false;"></iframe>');
+    }
+    /*创建表单*/
+    if ($('form[name=loginFormHidden]').length <= 0) {
+        $('body').append('<form name="loginFormHidden" target="ssoLoginFrame" style="display: none;" action="'
+            +$._g.SSOUrl + '/member/login.html'
+            +'"></form>'
+        );
+    }
+
+    var _loginFormHidden = $('form[name=loginFormHidden]');
+    if (_loginFormHidden.find('input[name=pwkey]').length > 0) {
+        _loginFormHidden.find('input[name=pwkey]').val(eellySSOController.randomString(16));
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="pwkey" value="'+eellySSOController.randomString(16)+'" />');
+    }
+
+    if (_loginFormHidden.find('input[name=username]').length > 0) {
+        _loginFormHidden.find('input[name=username]').val(_formObj.find('input[name=username]').val());
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="username" value="'
+            +_formObj.find('input[name=username]').val()
+            +'" />'
+        );
+    }
+
+    if (_loginFormHidden.find('input[name=password]').length > 0) {
+        _loginFormHidden.find('input[name=password]').val(
+            _formObj.find('input[name=password]').xyz(_loginFormHidden.find('input[name=pwkey]').val())
+        );
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="password" value="'
+            +_formObj.find('input[name=password]').xyz(_loginFormHidden.find('input[name=pwkey]').val())
+            +'" />'
+        );
+    }
+
+    if (_loginFormHidden.find('input[name=servertime]').length > 0) {
+        _loginFormHidden.find('input[name=servertime]').val(_formObj.find('input[name=servertime]').val());
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="servertime" value="'
+            +_formObj.find('input[name=servertime]').val()
+            +'" />'
+        );
+    }
+
+    if (_loginFormHidden.find('input[name=nonce]').length > 0) {
+        _loginFormHidden.find('input[name=nonce]').val(_formObj.find('input[name=nonce]').val());
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="nonce" value="'
+            +_formObj.find('input[name=nonce]').val()
+            +'" />'
+        );
+    }
+
+    if (_loginFormHidden.find('input[name=appKey]').length > 0) {
+        _loginFormHidden.find('input[name=appKey]').val(_formObj.find('input[name=appKey]').val());
+    } else {
+        _loginFormHidden.append('<input type="hidden" name="appKey" value="'
+            +_formObj.find('input[name=appKey]').val()
+            +'" />'
+        );
+    }
+
+    /*如果设置了具体的自定义函数，那么在登录成功/失败之后，就调用自定义函数，否则调用的是eellySSOController.feedBackUrlCallBack*/
+    if (_formObj.find('input[name=callback]').length > 0 && _formObj.find('input[name=callback]').val() != '') {
+        if (_loginFormHidden.find('input[name=callback]').length > 0) {
+            _loginFormHidden.find('input[name=callback]').val(_formObj.find('input[name=callback]').val());
+        } else {
+            _loginFormHidden.append('<input type="hidden" name="callback" value="'
+                +_formObj.find('input[name=callback]').val()
+                +'" />'
+            );
+        }
+    }
+
+    /*如果设置了登录成功后的跳转地址，那么在登录成功后跑到指定地址。否则是跳转到app指定的返回地址*/
+    if (_formObj.find('input[name=returl]').length > 0 && _formObj.find('input[name=returl]').val() != '') {
+        if (_loginFormHidden.find('input[name=returl]').length > 0) {
+            _loginFormHidden.find('input[name=returl]').val(_formObj.find('input[name=returl]').val());
+        } else {
+            _loginFormHidden.append('<input type="hidden" name="returl" value="'
+                +_formObj.find('input[name=returl]').val()
+                +'" />'
+            );
+        }
+    }
+
+    _loginFormHidden.submit();
+}
+
+/**
+ * 登录返回处理
+ * 
+ * @param json _obj 异步返回的数据
+ */
+eellySSOController.feedBackUrlCallBack = function(_obj) {
+    try {
+        if (_obj.code == 0) {
+            /*如果设置了返回路径，则跳转到指定路径*/
+            var _redirectUrl = typeof _obj.retval.returl != 'undefined' ? _obj.retval.returl : '//www.eelly.com';
+            window.location.href = _redirectUrl;
+        } else {
+            alertDialog(_obj.msg);
+        }
+    } catch (ex) {
+        alertDialog(MSG_ERROR_DEFAULT);
+    }
+}
+
+/**
+ * 同步退出
+ * 
+ * @param string _url 当前请求的应用退出url
+ * @param string _callback 可选参数 同步退出后的回调函数
+ */
+eellySSOController.syncLogout = function (_url) {
+    var _callBack = arguments[1] ? arguments[1] : "";
+    var _data = arguments[2] ? arguments[2] : "";
+    $.ajax({
+        url: _url,
+        dataType: 'jsonp',
+        success: function (rs) {
+            if (typeof rs.retval != 'undefined') {
+                $('body').append(rs.retval);
+            }
+            
+            /*创建iframe，调用passport同步退出*/
+            if ($('iframe[name=ssoLogoutFrame]').length <= 0) {
+                var _src = $._g.SSOUrl + '/member/logout.html?appKey='+$._g.appKey
+                    +'&callback='+_callBack
+                    +'&data='+_data
+                    ;
+                $('body').append('<iframe id="ssoLogoutFrame" name="ssoLogoutFrame" width="0" height="0" \n\
+                    style="display:none;" src="'+_src+'"></iframe>');
+            }
+        }
+    });
+}
+
+/**
+ * 同步退出后的跳转地址
+ * 
+ * @param string _url 当前请求的应用退出url
+ */
+eellySSOController.syncLogoutRedirect = function (_url) {
+    window.location.href = _url;
+}
+
+/**
+ * 调用页面可自定义回调alert函数
+ * 
+ * @param string _msg 提示信息
+ * @param function __ 匿名回调函数
+ */
+if (typeof alertDialog != 'function') {
+    function alertDialog(_msg) {
+        alert(_msg);
+        if (arguments[1]) {
+            arguments[1]();
+        }
+    }
+}
